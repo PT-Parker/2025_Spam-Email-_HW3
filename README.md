@@ -1,5 +1,11 @@
 # 簡訊垃圾郵件分類器 (Spam SMS Classifier)
 
+## 🚀 線上 Demo 網站
+
+您可以點擊以下網址，直接在瀏覽器中體驗這個專案：
+
+[https://2025spam-email-hw3-parker-ho.streamlit.app/](https://2025spam-email-hw3-parker-ho.streamlit.app/)
+
 ## 專案描述
 
 本專案建立了一個以支援向量機 (SVM) 為核心的垃圾簡訊分類流程，涵蓋資料下載、前處理、模型訓練與評估，並透過 Streamlit 打造完整的繁體中文互動式網頁介面，方便快速測試與展示模型成果。
