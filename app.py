@@ -13,7 +13,7 @@ from typing import Tuple
 
 import joblib
 import streamlit as st
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 
 from preprocessing.preprocess_sms import clean_message
 
@@ -36,7 +36,7 @@ def main() -> None:
     st.title("簡訊垃圾郵件分類器")
     st.write("這是一個使用 SVM 機器學習模型來偵測垃圾簡訊的應用程式。請在下方輸入一則英文訊息來進行測試。")
 
-    translator = Translator()
+    translator = GoogleTranslator(source="en", target="zh-TW")
 
     st.sidebar.title("範例訊息")
     spam_examples = [
@@ -67,10 +67,8 @@ def main() -> None:
         st.subheader("即時中文翻譯")
         if st.session_state.input_text:
             try:
-                translation = translator.translate(
-                    st.session_state.input_text, src="en", dest="zh-tw"
-                )
-                st.info(translation.text)
+                translation = translator.translate(st.session_state.input_text)
+                st.info(translation)
             except Exception:
                 st.error("翻譯服務暫時無法使用")
         else:
