@@ -1,5 +1,5 @@
 """
-Streamlit interface for the SMS spam classifier baseline.
+Streamlit interface for the SMS spam classifiers (SVM and Logistic Regression).
 
 The UI uses Traditional Chinese for titles and instructions while keeping
 interactive elements (button, prediction feedback) in English, per the
@@ -9,7 +9,6 @@ project requirements.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Tuple
 
 import joblib
 import streamlit as st
@@ -18,23 +17,34 @@ from deep_translator import GoogleTranslator
 from preprocessing.preprocess_sms import clean_message
 
 VECTORIZER_PATH = Path("artifacts/tfidf_vectorizer.pkl")
-MODEL_PATH = Path("artifacts/svm_model.pkl")
+SVM_MODEL_PATH = Path("artifacts/svm_model.pkl")
+LOGREG_MODEL_PATH = Path("artifacts/logreg_model.pkl")
+MODEL_OPTIONS = {
+    "線性 SVM": SVM_MODEL_PATH,
+    "邏輯迴歸": LOGREG_MODEL_PATH,
+}
 
 
 @st.cache_resource
-def load_artifacts() -> Tuple[object, object]:
+def load_vectorizer() -> object:
     """
-    Lazily load the TF-IDF vectorizer and trained SVM model.
+    Lazily load and cache the TF-IDF vectorizer.
     """
-    vectorizer = joblib.load(VECTORIZER_PATH)
-    model = joblib.load(MODEL_PATH)
-    return vectorizer, model
+    return joblib.load(VECTORIZER_PATH)
+
+
+@st.cache_resource
+def load_model(model_path: Path) -> object:
+    """
+    Lazily load and cache a trained classification model.
+    """
+    return joblib.load(model_path)
 
 
 def main() -> None:
     st.set_page_config(page_title="簡訊垃圾郵件分類器", page_icon="📱")
     st.title("簡訊垃圾郵件分類器")
-    st.write("這是一個使用 SVM 機器學習模型來偵測垃圾簡訊的應用程式。請在下方輸入一則英文訊息來進行測試。")
+    st.write("這是一個提供 SVM 與邏輯迴歸兩種模型來偵測垃圾簡訊的應用程式。請在下方輸入一則英文訊息來進行測試。")
 
     translator = GoogleTranslator(source="en", target="zh-TW")
 
@@ -75,6 +85,15 @@ def main() -> None:
             st.info("... 等待輸入 ...")
 
     input_text = st.session_state.input_text
+    model_choice = st.radio("選擇預測模型", list(MODEL_OPTIONS.keys()), index=0)
+    selected_model_path = MODEL_OPTIONS[model_choice]
+    threshold = st.slider(
+        "決策門檻值 (Decision Threshold)",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.5,
+        step=0.01,
+    )
 
     if st.button("預測"):
         if not input_text.strip():
@@ -82,19 +101,44 @@ def main() -> None:
             return
 
         try:
-            vectorizer, model = load_artifacts()
+            vectorizer = load_vectorizer()
         except FileNotFoundError as exc:
             st.error(f"Required artifact missing: {exc}")
+            return
+        try:
+            model = load_model(selected_model_path)
+        except FileNotFoundError:
+            st.error(f"找不到模型檔案：{selected_model_path}")
+            return
+        except Exception as exc:
+            st.error(f"載入模型時發生錯誤：{exc}")
+            return
+
+        if not hasattr(model, "predict_proba"):
+            st.error(
+                "本模型目前不支援機率預測，請重新訓練或選擇其他模型。",
+            )
             return
 
         cleaned_text = clean_message(input_text)
         features = vectorizer.transform([cleaned_text])
-        prediction = model.predict(features)[0]
+        probabilities = model.predict_proba(features)[0]
 
-        if str(prediction).lower() == "spam":
-            st.error("預測結果：垃圾郵件", icon="🚫")
+        classes = [str(label).lower() for label in getattr(model, "classes_", [])]
+        try:
+            spam_index = classes.index("spam")
+        except ValueError:
+            st.error("模型未包含 spam 類別，請確認訓練資料。")
+            return
+
+        spam_probability = probabilities[spam_index]
+        is_spam = spam_probability >= threshold
+        probability_display = f"{spam_probability * 100:.1f}%"
+
+        if is_spam:
+            st.error(f"預測結果：垃圾郵件 (機率: {probability_display})", icon="🚫")
         else:
-            st.success("預測結果：正常郵件", icon="✅")
+            st.success(f"預測結果：正常郵件 (機率: {probability_display})", icon="✅")
 
 
 if __name__ == "__main__":
